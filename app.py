@@ -1,114 +1,173 @@
-import pandas as pd  
-import numpy as np  
-import seaborn as sns  
-import matplotlib.pyplot as plt  
-import geopandas as gpd  
-import folium  
-from shapely import wkb  
-from sklearn.impute import SimpleImputer
-from sklearn.cluster import DBSCAN, KMeans 
-from sklearn.ensemble import RandomForestClassifier  
-from sklearn.tree import DecisionTreeClassifier  
-from sklearn.model_selection import train_test_split  
-import streamlit as st  
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+import folium
+from streamlit_folium import st_folium
+from sklearn.cluster import DBSCAN, KMeans
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+import streamlit as st
 
+st.set_page_config(page_title="Industry Data Dashboard", layout="wide")
+st.sidebar.title("📌 Navigation")
+page = st.sidebar.radio("Go to:", ["Home", "Data Cleaning", "Geospatial Analysis", "Trends & Growth", "AI Predictions"])
 
-# Streamlit App
-st.set_page_config(page_title="Industry Data Analysis", layout="wide")
-st.title("Industry Data Visualization and Analysis")
+latitude_col, longitude_col = "latitude", "longitude"
 
-# Step 1: Load the Dataset
-@st.cache
-def load_data():
-    return pd.read_csv("other_industries_original_unaltered.csv", dtype=str)  # Load all columns as strings initially
+st.sidebar.subheader("📂 Upload Data")
+uploaded_file = st.sidebar.file_uploader("Upload CSV", type=["csv"])
+if uploaded_file:
+    df = pd.read_csv(uploaded_file, dtype=str)
+    st.sidebar.success("✅ Data Loaded!")
+else:
+    st.sidebar.warning("⚠️ Upload a dataset to continue.")
+    st.stop()
 
-df = load_data()
+# Home page
+if page == "Home":
+    st.title("📊 Industry Data Dashboard")
+    st.subheader("Welcome to the Industry Data Insights & AI Predictions App!")
+    st.write(
+        "This application allows you to explore industry trends, visualize geospatial data, "
+        "detect anomalies, and predict industrial hotspots using machine learning models."
+    )
 
-# Step 2: Data Inspection
-st.subheader("Data Overview")
-st.write(df.head())
+    st.markdown("---")
 
-# Step 3: Data Cleaning
-## Handling Missing Values
-df.replace(to_replace=['NULL', 'null', '', ' '], value=np.nan, inplace=True)
-missing_data = df.isnull().sum() / len(df) * 100
-st.subheader("Missing Values Percentage")
-st.write(missing_data.sort_values(ascending=False))
+    st.markdown("## 👨‍💻 About the Author")
+    col1, col2 = st.columns([1, 3])
 
-## Trim whitespace from text columns
-for col in df.select_dtypes(include='object').columns:
-    df[col] = df[col].str.strip()
+    with col1:
+        st.image("https://avatars.githubusercontent.com/u/31886268?v=4", width=150)  # Replace with actual author image URL
 
-## Convert numeric columns
-df['year'] = pd.to_numeric(df['year'], errors='coerce')
-df['licenses_count'] = pd.to_numeric(df['licenses_count'], errors='coerce')
-df['lab_count'] = pd.to_numeric(df['lab_count'], errors='coerce')
-df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
-df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
+    with col2:
+        st.markdown("### **Arpit Dubey**")
+        st.write(
+            "📌 **AI & Data Science Expert** | **Generative AI Developer**\n"
+            "🔍 Specializing in AI/ML, NLP, and Data Analytics.\n"
+            "💡 Passionate about building intelligent solutions for real-world problems."
+        )
+        st.markdown("📧 [Email](mailto:aarpitdubey@gmail.com)")
+        st.markdown("🔗 [LinkedIn](https://www.linkedin.com/in/aarpitdubey)")
+        st.markdown("🏆 [GitHub](https://github.com/aarpitdubey)")
 
-# Step 4: Data Visualization
-st.subheader("Missing Values Heatmap")
-fig, ax = plt.subplots(figsize=(10, 6))
-sns.heatmap(df.isnull(), cbar=False, cmap='viridis', ax=ax)
-st.pyplot(fig)
+    st.markdown("---")
 
-# Step 5: Geospatial Visualization
-st.subheader("Industry Locations on Map")
-def parse_geom(geom_str):
-    try:
-        return wkb.loads(geom_str, hex=True)
-    except Exception:
-        return None
+    st.subheader("🔍 How to Use This App")
+    st.write(
+        "- **📂 Upload** a CSV file with industry data.\n"
+        "- **🛠 Clean** the data by handling missing values.\n"
+        "- **🗺️ Visualize** industry locations on an interactive map.\n"
+        "- **📈 Analyze** trends, clustering, and anomalies.\n"
+        "- **🤖 Predict** industry hotspots using AI/ML models."
+    )
 
-df['geometry'] = df['geom'].apply(lambda x: parse_geom(x) if pd.notnull(x) else None)
-gdf = gpd.GeoDataFrame(df, geometry='geometry')
-gdf.set_crs(epsg=4326, inplace=True)
+    st.success("✅ Get started by selecting an option from the sidebar!")
 
-m = folium.Map(location=[20.5937, 78.9629], zoom_start=5)
-for _, row in gdf.iterrows():
-    folium.Marker([row.latitude, row.longitude], popup=row['branch']).add_to(m)
-st.components.v1.html(m._repr_html_(), height=600)
+# Data Cleaning Page
+elif page == "Data Cleaning":
+    st.title("🛠 Data Cleaning & Missing Values")
 
-# Step 6: Industry Trends Analysis
-st.subheader("Industry Count by State")
-st.bar_chart(df['branch'].value_counts())
+    df.replace(to_replace=['NULL', 'null', '', ' '], value=np.nan, inplace=True)
+    df = df.infer_objects(copy=False)
 
-# Step 7: Anomaly Detection (DBSCAN for Latitude & Longitude)
-st.subheader("Anomaly Detection (DBSCAN)")
-coords = df[['latitude', 'longitude']].dropna().values
-dbscan = DBSCAN(eps=0.5, min_samples=5).fit(coords)
-df['anomaly'] = dbscan.labels_
-st.write("Anomalies Found:")
-st.write(df[df['anomaly'] == -1])
+    missing_percent = df.isnull().mean() * 100
+    if df.isnull().sum().sum() > 0:
+        st.subheader("📊 Missing Values Heatmap")
+        fig, ax = plt.subplots(figsize=(12, 6))
+        sns.heatmap(df.isnull(), cbar=False, cmap='Reds', ax=ax)
+        ax.set_title("Missing Values Heatmap")
+        st.pyplot(fig)
+    else:
+        st.success("✅ No Missing Values Found!")
 
-# Step 8: Clustering (K-Means)
-st.subheader("Industry Clusters (K-Means)")
-kmeans = KMeans(n_clusters=5, random_state=42)
-df['cluster'] = kmeans.fit_predict(df[['latitude', 'longitude']])
-fig, ax = plt.subplots()
-plt.scatter(df['longitude'], df['latitude'], c=df['cluster'], cmap='viridis')
-st.pyplot(fig)
+    missing_handling = st.radio("Handle Missing Values:", ["Fill with Mean/Mode", "Drop Rows", "Fill with Zero"])
+    if missing_handling == "Fill with Mean/Mode":
+        numeric_cols = df.select_dtypes(include=np.number).columns
+        categorical_cols = df.select_dtypes(include=['object']).columns
+        df[numeric_cols] = df[numeric_cols].fillna(df[numeric_cols].median())
+        for col in categorical_cols:
+            df[col] = df[col].fillna(df[col].mode()[0])
+    elif missing_handling == "Fill with Zero":
+        df.fillna(0, inplace=True)
+    elif missing_handling == "Drop Rows":
+        df.dropna(inplace=True)
 
-# Step 9: Predict Missing Data (Random Forest)
-st.subheader("Predict Missing Scale Values")
-df.dropna(subset=['scale'], inplace=True)
-X = df[['latitude', 'longitude', 'branch']]
-y = df['scale']
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-model = RandomForestClassifier()
-model.fit(X_train, y_train)
-st.write("Model Accuracy: ", model.score(X_test, y_test))
+    st.success("✅ Missing Values Handled!")
 
-# Step 10: Industrial Hotspot Prediction (Decision Tree)
-st.subheader("Industrial Hotspot Prediction")
-model = DecisionTreeClassifier()
-model.fit(X_train, y_train)
-prediction = model.predict([[12.9716, 77.5946, 'Karnataka']])
-st.write("Predicted Industry Scale for Bangalore: ", prediction)
+# Geospatial Analysis Page
+elif page == "Geospatial Analysis":
+    st.title("🗺️ Industry Geospatial Analysis")
 
-# Additional Feature: Data Completeness Dashboard
-st.subheader("Data Completeness Dashboard")
-st.bar_chart(missing_data)
-st.write("Interactive Data Filtering")
-selected_state = st.selectbox("Select State", df['branch'].unique())
-st.write(df[df['branch'] == selected_state])
+    show_map = st.checkbox("Show Industry Map", value=True)
+    if show_map:
+        df[latitude_col] = pd.to_numeric(df[latitude_col], errors='coerce')
+        df[longitude_col] = pd.to_numeric(df[longitude_col], errors='coerce')
+        df_filtered = df.dropna(subset=[latitude_col, longitude_col])
+
+        if not df_filtered.empty:
+            max_points = st.slider("Select number of points for map", min_value=0, max_value=50, value=10)
+            df_sample = df_filtered.sample(min(max_points, len(df_filtered)))
+
+            m = folium.Map(location=[df_sample[latitude_col].mean(), df_sample[longitude_col].mean()], zoom_start=5, tiles="CartoDB positron")
+            for _, row in df_sample.iterrows():
+                folium.CircleMarker(location=[row[latitude_col], row[longitude_col]], radius=2, color="blue", fill=True, fill_color="blue", fill_opacity=0.6).add_to(m)
+            st_folium(m, width=500, height=350)
+        else:
+            st.warning("⚠️ No valid geographic data available.")
+
+# Trends & Growth Analysis Page
+elif page == "Trends & Growth":
+    st.title("📈 Industry Trends & Growth Analysis")
+
+    state_counts = df["state"].value_counts()
+    st.subheader("🏆 Top 5 States with Highest & Lowest Industries")
+    col1, col2 = st.columns(2)
+    col1.write("🔼 Highest:")
+    col1.write(state_counts.head(5))
+    col2.write("🔽 Lowest:")
+    col2.write(state_counts.tail(5))
+
+    st.subheader("📊 Industry Count by State")
+    st.bar_chart(state_counts)
+
+# AI Predictions Page
+elif page == "AI Predictions":
+    st.title("🤖 AI-Based Predictions")
+
+    target_col = "scale"
+    feature_cols = [latitude_col, longitude_col, "state"]
+    
+    if all(col in df.columns for col in feature_cols + [target_col]):
+        df_filtered = df.dropna(subset=[target_col])
+        
+        if len(df_filtered) >= 5:
+            X, y = df_filtered[feature_cols], df_filtered[target_col]
+            X = X.copy()
+            label_encoders = {}
+            for col in feature_cols:
+                if X[col].dtype == "object":
+                    label_encoders[col] = LabelEncoder()
+                    X[col] = label_encoders[col].fit_transform(X[col])
+            
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+            model = RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42)
+            model.fit(X_train, y_train)
+            st.write(f"✅ Model Accuracy: {model.score(X_test, y_test):.2f}")
+            
+            # Convert latitude & longitude to numeric before calling .median()
+            df[latitude_col] = pd.to_numeric(df[latitude_col], errors='coerce')
+            df[longitude_col] = pd.to_numeric(df[longitude_col], errors='coerce')
+
+            lat_input = st.number_input("Enter Latitude", value=df[latitude_col].dropna().median())
+            lon_input = st.number_input("Enter Longitude", value=df[longitude_col].dropna().median())
+            state_input = st.selectbox("Select State", df["state"].unique())
+            
+            state_encoded = label_encoders["state"].transform([state_input])[0] if state_input in label_encoders["state"].classes_ else 0
+            prediction = model.predict([[lat_input, lon_input, state_encoded]])[0]
+            st.write(f"🏭 **Predicted Industry Scale:** {prediction}")
+        else:
+            st.warning("⚠️ Not enough data for AI model training.")
