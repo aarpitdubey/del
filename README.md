@@ -1,5 +1,7 @@
 # del
 
+Deployed: https://industrial.streamlit.app/
+
 ```python
 git clone https://github.com/aarpitdubey/del.git
 ```
